@@ -1,0 +1,39 @@
+<!doctype html><html lang="en" data-theme="light"><head><meta charset="utf-8"><script>try{document.documentElement.dataset.theme=localStorage.theme||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light")}catch(e){}</script><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex"><title>Admin</title><link rel="stylesheet" href="style.css"></head><body>
+<div class="w" style="max-width:560px;padding-top:24px;padding-bottom:60px">
+<h1 class="serif" style="font-size:34px">Admin</h1><style>#m:empty{display:none}</style><p id="m" role="status" style="position:sticky;top:0;z-index:5;margin:0 0 14px;padding:10px 12px;background:var(--panel);border-radius:10px;font-weight:500;white-space:pre-line"></p>
+<button class="btn g" id="chk" type="button" style="height:40px;margin-bottom:14px">Check setup</button>
+<form id="lf0" hidden><label>Email<input name="email" type="email" required></label><label>Password<input name="password" type="password" required></label><button class="btn">Log in</button></form>
+<div id="app" hidden>
+<div class="pills" style="margin:0 0 20px"><button id="t1" class="on">+ Lab</button><button id="t2">+ Certificate</button><button id="out">Log out</button></div>
+<form id="fl"><label>Title<input name="title" required placeholder="OSPF 3-router lab"></label><label>Category<select name="category" required><option value="">Choose…</option><option>MikroTik</option><option>Cisco</option><option>OLT/FTTx</option><option>CCTV</option><option>IT Support</option><option>CBT&amp;A</option></select></label><label>Tools<input name="tools" placeholder="Cisco Packet Tracer"></label><label>Title in Bangla (optional)<input name="title_bn"></label><label>Description / commands used<textarea name="description" rows="5"></textarea></label><label>Description in Bangla (optional)<textarea name="description_bn" rows="4"></textarea></label><label>Screenshots (many allowed)<input name="shots" type="file" accept="image/*" multiple></label><button class="btn" style="width:100%">Save lab</button></form>
+<form id="fc" hidden><label>Certificate title<input name="title" required></label><label>Organization<input name="org" required></label><label>Title in Bangla (optional)<input name="title_bn"></label><label>Organization in Bangla (optional)<input name="org_bn"></label><label>Date<input name="issued" placeholder="Jan 2026 – Mar 2026"></label><label>Certificate photo (optional)<input name="shot" type="file" accept="image/*"></label><button class="btn" style="width:100%">Save certificate</button></form>
+<p class="k" style="margin-top:34px">Labs</p><ul class="l" id="ll"></ul><p class="k" style="margin-top:24px">Certificates</p><ul class="l" id="cl"></ul></div></div>
+<script src="config.js"></script><script src="app.js"></script>
+<script>
+const bn=(f,ks)=>Object.fromEntries(ks.filter(k=>f.get(k)).map(k=>[k,f.get(k)]));
+const $=i=>document.getElementById(i),say=t=>$("m").textContent=t;
+async function gate(){let a=!!localStorage.getItem("lab_tok");if(a&&expired()&&!(await renew())){localStorage.removeItem("lab_tok");localStorage.removeItem("lab_ref");a=false;say("Session expired. Please log in again.")}$("lf0").hidden=a;$("app").hidden=!a;if(a)refresh()}
+async function refresh(){try{const[L,K]=await Promise.all([list("labs"),list("certificates")]);
+ $("ll").innerHTML=L.map(x=>`<li>${esc(x.title)} <a href="#" data-t="labs" data-i="${x.id}">Delete</a></li>`).join("");
+ $("cl").innerHTML=K.map(x=>`<li>${esc(x.title)} <a href="#" data-t="certificates" data-i="${x.id}">Delete</a></li>`).join("");
+ document.querySelectorAll("li a[data-i]").forEach(a=>a.onclick=async e=>{e.preventDefault();if(confirm("Delete?")){try{await del(a.dataset.t,a.dataset.i);refresh()}catch(x){say(x.message)}}})}catch(x){say(x.message)}}
+if(!ok())say("Set your Supabase keys in config.js first.");else gate();
+$("lf0").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);try{await login(f.get("email"),f.get("password"));say("");gate()}catch(x){say(x.message)}};
+$("chk").onclick=async()=>{const out=[],add=(ok,t)=>out.push((ok?"✅ ":"❌ ")+t),g=(p,h)=>fetch(C.url+p,{headers:h||H()});say("Checking...");
+ try{let r=await g("/rest/v1/labs?select=id&limit=1");add(r.ok,r.ok?"labs table found":"labs table problem ("+await why(r)+") → run supabase-setup.sql");
+ r=await g("/rest/v1/labs?select=title_bn,description_bn&limit=1");add(r.ok,r.ok?"Bangla columns found":"Bangla columns missing → run supabase-update.sql");
+ r=await g("/rest/v1/certificates?select=id&limit=1");add(r.ok,r.ok?"certificates table found":"certificates table problem ("+await why(r)+") → run supabase-setup.sql");
+ r=await g("/storage/v1/object/public/labs/none.jpg");const t=await r.text(),nb=/Bucket not found/i.test(t);add(!nb,nb?"storage bucket 'labs' missing → run supabase-setup.sql":"storage bucket 'labs' found");
+ if(localStorage.getItem("lab_tok")){r=await g("/auth/v1/user",H(true));add(r.ok,r.ok?"login is valid":"login expired → Log out, then log in again")}else add(false,"not logged in yet → log in first");
+ r=await g("/auth/v1/settings");if(r.ok){const j=await r.json();add(j.disable_signup===true,j.disable_signup?"public sign-up is off (safe)":"public sign-up is ON → Supabase: Authentication → Sign In / Providers → turn off 'Allow new users to sign up'")}
+ }catch(e){add(false,"cannot reach Supabase ("+e.message+") → check internet and config.js")}
+ say(out.join("\n"))};
+$("out").onclick=()=>{localStorage.removeItem("lab_tok");localStorage.removeItem("lab_ref");gate()};
+$("t1").onclick=()=>{$("fl").hidden=false;$("fc").hidden=true;$("t1").className="on";$("t2").className=""};
+$("t2").onclick=()=>{$("fl").hidden=true;$("fc").hidden=false;$("t2").className="on";$("t1").className=""};
+$("fl").onsubmit=async e=>{e.preventDefault();const fm=e.target,f=new FormData(fm),fs=fm.shots.files;if(!fs.length)return say("Add at least one screenshot");say("Uploading... please wait");if(e.submitter)e.submitter.disabled=true;
+ try{const images=await Promise.all([...fs].map(upload));await add("labs",{title:f.get("title"),category:f.get("category"),tools:f.get("tools"),description:f.get("description"),images,...bn(f,["title_bn","description_bn"])});fm.reset();say("Saved. It is live on your site.");refresh()}catch(x){say(x.message)}finally{if(e.submitter)e.submitter.disabled=false}};
+$("fc").onsubmit=async e=>{e.preventDefault();const fm=e.target,f=new FormData(fm);say("Saving...");if(e.submitter)e.submitter.disabled=true;
+ try{const image=fm.shot.files[0]?await upload(fm.shot.files[0]):"";await add("certificates",{title:f.get("title"),org:f.get("org"),issued:f.get("issued"),image,...bn(f,["title_bn","org_bn"])});fm.reset();say("Saved. It is live on your site.");refresh()}catch(x){say(x.message)}finally{if(e.submitter)e.submitter.disabled=false}};
+</script></body></html>
